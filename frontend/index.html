@@ -14,26 +14,29 @@
     </header>
 
     <form id="eventForm" class="form" novalidate>
-      <div class="row">
-        <label for="name">Name <span class="req">*</span></label>
-        <input id="name" name="name" type="text" placeholder="Full name" required />
+      <div class="row two-col">
+        <div>
+          <label for="name">Name <span class="req">*</span></label>
+          <input id="name" name="name" type="text" placeholder="Full name" required />
+        </div>
+
+        <div>
+          <label for="email">Email <span class="req">*</span></label>
+          <input id="email" name="email" type="email" placeholder="you@domain.com" required />
+        </div>
       </div>
 
-      <div class="row">
-        <label for="email">Email <span class="req">*</span></label>
-        <input id="email" name="email" type="email" placeholder="you@domain.com" required />
-      </div>
+      <div class="row two-col">
+        <div>
+          <label for="mobile">Mobile <span class="req">*</span></label>
+          <input id="mobile" name="mobile" type="tel" pattern="[0-9]{10}" placeholder="10-digit mobile" required />
+        </div>
 
-      <div class="row">
-        <label for="mobile">Mobile <span class="req">*</span></label>
-        <input id="mobile" name="mobile" type="tel" pattern="[0-9]{10}" placeholder="10-digit mobile" required />
-      </div>
-
-      <div class="row">
-        <label for="city">City (type digits or letters) <span class="req">*</span></label>
-        <input id="city" name="city" list="city-list" placeholder="Start typing PIN or city name" autocomplete="off" required />
-        <datalist id="city-list"></datalist>
-        <small class="hint">If you type digits (like PIN), matching cities will auto-fill.</small>
+        <div>
+          <label for="city">City (type PIN or city name) <span class="req">*</span></label>
+          <input id="city" name="city" list="city-list" placeholder="Start typing PIN or city name" autocomplete="off" required />
+          <datalist id="city-list"></datalist>
+        </div>
       </div>
 
       <div class="row">
@@ -49,7 +52,7 @@
       </div>
 
       <div id="otherBox" class="row hidden">
-        <label for="otherText">Please describe</label>
+        <label for="otherText">Please describe <span class="req">*</span></label>
         <input id="otherText" name="otherText" type="text" placeholder="Describe the event" />
       </div>
 
@@ -66,7 +69,17 @@
   </main>
 
 <script>
-// Sample city/pincode database (small). Replace or expand with a complete dataset or API.
+/*
+  Updated behavior:
+  - Required fields: name, email, mobile, city, eventType.
+  - If 'Others' selected, otherText becomes required and visible.
+  - City suggestions from small local sample + Indian PIN lookup via https://api.postalpincode.in/pincode/<pin>
+  - On submit, form is POSTed to the provided Google Apps Script endpoint as FormData (so the script can access request parameters).
+  - Shows success/error messages and handles basic client validation.
+*/
+
+const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby527xYCYsLBCmGY-gsQQ8o9F2-asdoiZARqHK-zuoAJAT_N_8RegprdyZUlWbHiF_YPg/exec';
+
 const sampleCities = [
   { name: 'New Delhi', pincode: '110001' },
   { name: 'Mumbai', pincode: '400001' },
@@ -95,40 +108,43 @@ function setDatalistOptions(options) {
 
 cityInput.addEventListener('input', async (e) => {
   const v = e.target.value.trim();
-  if(!v) { setDatalistOptions([]); return; }
+  if (!v) { setDatalistOptions([]); return; }
 
-  // If the user typed mostly digits, try to match pincodes
-  if(/^\d+$/.test(v)) {
-    // If length is 6, try official API for precise match
-    if(v.length === 6) {
+  // If typed only digits -> treat as PIN partial or full
+  if (/^\d+$/.test(v)) {
+    // If length is 6, try official PIN API
+    if (v.length === 6) {
       try {
         const res = await fetch('https://api.postalpincode.in/pincode/' + v);
         const data = await res.json();
-        if(Array.isArray(data) && data[0].Status === 'Success') {
-          const names = data[0].PostOffice.map(p => p.District + (p.State ? ', ' + p.State : ''));
+        if (Array.isArray(data) && data[0] && data[0].Status === 'Success') {
+          const names = data[0].PostOffice.map(p => `${p.District}${p.State ? ', ' + p.State : ''} (${p.Name})`);
           setDatalistOptions(names);
-          if(names.length === 1) cityInput.value = names[0];
           return;
         }
-      } catch(err) {
-        // ignore and fallback to local list
+      } catch (err) {
+        // fallback to local list
       }
     }
 
-    // Partial digit match: filter sampleCities by pincode startsWith
-    const matches = sampleCities.filter(c => c.pincode.startsWith(v)).map(c => c.name + ' (' + c.pincode + ')');
+    // Partial PIN: show local matches
+    const matches = sampleCities
+      .filter(c => c.pincode.startsWith(v))
+      .map(c => `${c.name} (${c.pincode})`);
     setDatalistOptions(matches);
     return;
   }
 
-  // Otherwise, treat input as text and filter by city name
-  const textMatches = sampleCities.filter(c => c.name.toLowerCase().startsWith(v.toLowerCase())).map(c => c.name + ' (' + c.pincode + ')');
+  // Text input: filter by city name start
+  const textMatches = sampleCities
+    .filter(c => c.name.toLowerCase().startsWith(v.toLowerCase()))
+    .map(c => `${c.name} (${c.pincode})`);
   setDatalistOptions(textMatches);
 });
 
-// Show/hide "Others" box
+// Show/hide 'Others' box
 eventType.addEventListener('change', () => {
-  if(eventType.value === 'Others') {
+  if (eventType.value === 'Others') {
     otherBox.classList.remove('hidden');
     otherText.setAttribute('required', '');
   } else {
@@ -137,30 +153,61 @@ eventType.addEventListener('change', () => {
   }
 });
 
-// Basic client-side validation + submit handler
-form.addEventListener('submit', (e) => {
+function showMessage(txt, type = 'error') {
+  message.textContent = txt;
+  message.className = type === 'success' ? 'success' : 'error';
+}
+
+// Submit handler - sends FormData to provided Google Apps Script URL
+form.addEventListener('submit', async (e) => {
   e.preventDefault();
-  if(!form.checkValidity()) {
-    message.textContent = 'Please fill all required fields correctly.';
-    message.className = 'error';
+  // browser validation
+  if (!form.checkValidity()) {
+    showMessage('Please fill all required fields correctly.', 'error');
+    // report validity to show native messages if needed
+    form.reportValidity();
     return;
   }
 
-  // Collect form data
-  const payload = {
-    name: form.name.value.trim(),
-    email: form.email.value.trim(),
-    mobile: form.mobile.value.trim(),
-    city: form.city.value.trim(),
-    eventType: form.eventType.value,
-    other: form.otherText ? form.otherText.value.trim() : ''
-  };
+  const formData = new FormData();
+  formData.append('name', form.name.value.trim());
+  formData.append('email', form.email.value.trim());
+  formData.append('mobile', form.mobile.value.trim());
+  formData.append('city', form.city.value.trim());
+  formData.append('eventType', form.eventType.value);
+  formData.append('other', form.otherText ? form.otherText.value.trim() : '');
+  formData.append('source', 'The-Event-HUB');
 
-  // Replace this with actual submission (fetch POST) to your server
-  console.log('Form payload', payload);
-  message.textContent = 'Thank you — your request has been received.';
-  message.className = 'success';
-  form.reset();
+  // Disable submit while sending
+  const submitBtn = form.querySelector('button[type="submit"]');
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Sending...';
+  showMessage('', '');
+
+  try {
+    const resp = await fetch(GOOGLE_SCRIPT_URL, {
+      method: 'POST',
+      body: formData,
+    });
+
+    let text;
+    try { text = await resp.text(); } catch (e) { text = ''; }
+
+    if (resp.ok) {
+      showMessage('Thank you — your request has been received.', 'success');
+      form.reset();
+      otherBox.classList.add('hidden');
+    } else {
+      showMessage('Submission failed. Server returned an error. Try again later.', 'error');
+      console.error('Submission error', resp.status, text);
+    }
+  } catch (err) {
+    console.error('Submission exception', err);
+    showMessage('Network error while sending. Please try again.', 'error');
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Submit';
+  }
 });
 </script>
 </body>

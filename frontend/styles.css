@@ -26,10 +26,12 @@ button.btn:hover{filter:brightness(1.03)}
 #message.success{color:#065f46}
 footer{margin-top:14px; color:var(--muted)}
 
-/* Responsive layout: two columns on wider screens */
+/* two-column layout on wider screens */
+.two-col { gap:12px; }
 @media(min-width:720px){
+  .two-col { display:flex; gap:12px; }
+  .two-col > * { flex:1; }
   .form{padding:28px}
-  .row{max-width:100%}
 }
 
 /* small screens adjustments */
