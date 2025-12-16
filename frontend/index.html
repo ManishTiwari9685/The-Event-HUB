@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>The Event HUB — Contact / Register</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <main class="container">
+    <header>
+      <h1>The Event HUB</h1>
+      <p class="lead">Tell us about your event — we'll connect you with volunteers & coordinators.</p>
+    </header>
+
+    <form id="eventForm" class="form" novalidate>
+      <div class="row">
+        <label for="name">Name <span class="req">*</span></label>
+        <input id="name" name="name" type="text" placeholder="Full name" required />
+      </div>
+
+      <div class="row">
+        <label for="email">Email <span class="req">*</span></label>
+        <input id="email" name="email" type="email" placeholder="you@domain.com" required />
+      </div>
+
+      <div class="row">
+        <label for="mobile">Mobile <span class="req">*</span></label>
+        <input id="mobile" name="mobile" type="tel" pattern="[0-9]{10}" placeholder="10-digit mobile" required />
+      </div>
+
+      <div class="row">
+        <label for="city">City (type digits or letters) <span class="req">*</span></label>
+        <input id="city" name="city" list="city-list" placeholder="Start typing PIN or city name" autocomplete="off" required />
+        <datalist id="city-list"></datalist>
+        <small class="hint">If you type digits (like PIN), matching cities will auto-fill.</small>
+      </div>
+
+      <div class="row">
+        <label for="eventType">Type of Event <span class="req">*</span></label>
+        <select id="eventType" name="eventType" required>
+          <option value="" disabled selected>Select event</option>
+          <option value="Wedding">Wedding</option>
+          <option value="Birthday">Birthday</option>
+          <option value="Festival">Festival</option>
+          <option value="Corporate">Corporate</option>
+          <option value="Others">Others</option>
+        </select>
+      </div>
+
+      <div id="otherBox" class="row hidden">
+        <label for="otherText">Please describe</label>
+        <input id="otherText" name="otherText" type="text" placeholder="Describe the event" />
+      </div>
+
+      <div class="row">
+        <button type="submit" class="btn">Submit</button>
+      </div>
+
+      <div id="message" role="status" aria-live="polite"></div>
+    </form>
+
+    <footer>
+      <small>Designed responsive — works on mobile, tablet and desktop.</small>
+    </footer>
+  </main>
+
+<script>
+// Sample city/pincode database (small). Replace or expand with a complete dataset or API.
+const sampleCities = [
+  { name: 'New Delhi', pincode: '110001' },
+  { name: 'Mumbai', pincode: '400001' },
+  { name: 'Bengaluru', pincode: '560001' },
+  { name: 'Kolkata', pincode: '700001' },
+  { name: 'Chennai', pincode: '600001' },
+  { name: 'Pune', pincode: '411001' }
+];
+
+const cityInput = document.getElementById('city');
+const cityList = document.getElementById('city-list');
+const eventType = document.getElementById('eventType');
+const otherBox = document.getElementById('otherBox');
+const otherText = document.getElementById('otherText');
+const form = document.getElementById('eventForm');
+const message = document.getElementById('message');
+
+function setDatalistOptions(options) {
+  cityList.innerHTML = '';
+  options.forEach(opt => {
+    const el = document.createElement('option');
+    el.value = opt;
+    cityList.appendChild(el);
+  });
+}
+
+cityInput.addEventListener('input', async (e) => {
+  const v = e.target.value.trim();
+  if(!v) { setDatalistOptions([]); return; }
+
+  // If the user typed mostly digits, try to match pincodes
+  if(/^\d+$/.test(v)) {
+    // If length is 6, try official API for precise match
+    if(v.length === 6) {
+      try {
+        const res = await fetch('https://api.postalpincode.in/pincode/' + v);
+        const data = await res.json();
+        if(Array.isArray(data) && data[0].Status === 'Success') {
+          const names = data[0].PostOffice.map(p => p.District + (p.State ? ', ' + p.State : ''));
+          setDatalistOptions(names);
+          if(names.length === 1) cityInput.value = names[0];
+          return;
+        }
+      } catch(err) {
+        // ignore and fallback to local list
+      }
+    }
+
+    // Partial digit match: filter sampleCities by pincode startsWith
+    const matches = sampleCities.filter(c => c.pincode.startsWith(v)).map(c => c.name + ' (' + c.pincode + ')');
+    setDatalistOptions(matches);
+    return;
+  }
+
+  // Otherwise, treat input as text and filter by city name
+  const textMatches = sampleCities.filter(c => c.name.toLowerCase().startsWith(v.toLowerCase())).map(c => c.name + ' (' + c.pincode + ')');
+  setDatalistOptions(textMatches);
+});
+
+// Show/hide "Others" box
+eventType.addEventListener('change', () => {
+  if(eventType.value === 'Others') {
+    otherBox.classList.remove('hidden');
+    otherText.setAttribute('required', '');
+  } else {
+    otherBox.classList.add('hidden');
+    otherText.removeAttribute('required');
+  }
+});
+
+// Basic client-side validation + submit handler
+form.addEventListener('submit', (e) => {
+  e.preventDefault();
+  if(!form.checkValidity()) {
+    message.textContent = 'Please fill all required fields correctly.';
+    message.className = 'error';
+    return;
+  }
+
+  // Collect form data
+  const payload = {
+    name: form.name.value.trim(),
+    email: form.email.value.trim(),
+    mobile: form.mobile.value.trim(),
+    city: form.city.value.trim(),
+    eventType: form.eventType.value,
+    other: form.otherText ? form.otherText.value.trim() : ''
+  };
+
+  // Replace this with actual submission (fetch POST) to your server
+  console.log('Form payload', payload);
+  message.textContent = 'Thank you — your request has been received.';
+  message.className = 'success';
+  form.reset();
+});
+</script>
+</body>
+</html>
